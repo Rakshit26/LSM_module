@@ -92,6 +92,10 @@ extern struct security_operations *security_ops;
 
 //HELPER_FUNCTIONS/////////////////////////////////////////////////////////////
 
+
+/* find_current_task: checks if the current task executing read/write is gedit or not */
+/* 			Return -EACCES if the task is gedit and 0 if not.	      */
+
 static int find_current_task(struct task_struct *ctask)
 {
     int retval = -EACCES;
