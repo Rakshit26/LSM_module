@@ -92,10 +92,8 @@ extern struct security_operations *security_ops;
 
 //HELPER_FUNCTIONS/////////////////////////////////////////////////////////////
 
-
-/* find_current_task: checks if the current task executing read/write is gedit or not */
-/* 			Return -EACCES if the task is gedit and 0 if not.	      */
-
+/*
+//function not required 
 static int find_current_task(struct task_struct *ctask)
 {
     int retval = -EACCES;
@@ -107,8 +105,9 @@ static int find_current_task(struct task_struct *ctask)
     	    		return 0;
     }
 
+*/
 /*check is any of the parent process is gedit .. loop till init process */
- 
+/* 
     while (strcmp (ctask->parent->comm,"init")) {
 
     	if (!strcmp (ctask->comm,"gedit"))
@@ -118,9 +117,11 @@ static int find_current_task(struct task_struct *ctask)
 	}
     }
 
+		
+
     return retval;
 }
-
+*/
 
 //HOOKS/////////////////////////////////////////////////////////////////////////
 
@@ -166,15 +167,12 @@ static  int lsm_inode_permission(struct inode *inode, int mask)
 
 static  int lsm_file_permission(struct file *file, int mask)
 {
-	if (find_current_task(current) != 0)
-	    {
+
+	if (!strcmp(current->comm,"gedit")) {
 	        printk(KERN_ALERT "You shall not pass!\n");
 	        return -EACCES;
 	    }
-	    else {
-	        printk(KERN_ALERT "You can pass for now !\n");
-	    }
-
+	
 	    return 0;
 }
 
@@ -217,12 +215,13 @@ static struct security_operations lsm_ops = {
 
 static int __init LSM_module_init(void)
 {
+/*
 
 	if (!security_module_enable(&lsm_ops)) {
 		printk(KERN_INFO "LSMC:  Disabled at boot.\n");
 		return 0;
 	}
-
+*/
 
     if (register_security(&lsm_ops))
     {
