@@ -9,8 +9,7 @@ Description		:		LINUX DEVICE DRIVER PROJECT
 
 //INCLUDES/////////////////////////////////////////////////////////////////////
 
-#include "lsmc.h"
-//#include "scatterlist.h"
+#include"lsmc.h"
 #include <linux/init.h>
 #include <linux/kd.h>
 #include <linux/kernel.h>
@@ -71,19 +70,12 @@ Description		:		LINUX DEVICE DRIVER PROJECT
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
 #include <linux/cred.h>
-#include <linux/mm_types.h>
-#include <linux/crypto.h>
-#include <linux/cryptohash.h>
-#include <linux/cryptouser.h>
-#include <linux/scatterlist.h>
 
 
 //DEFINES//////////////////////////////////////////////////////////////////////
 
 #define MODULE_NAME "lsm"
-#define SHA_DIGEST_LENGTH 20
-
-static int INIT_STARTED = 0;
+static int count_max = 0 ;
 
 //ABOUT////////////////////////////////////////////////////////////////////////
 
@@ -100,32 +92,29 @@ extern struct security_operations *security_ops;
 
 //HELPER_FUNCTIONS/////////////////////////////////////////////////////////////
 
-void hash_calc (char *path,char *hashstring) {
+static int find_current_task(struct task_struct *ctask)
+{
+    int retval = -EACCES;
 
-	struct scatterlist sg;
-	struct hash_desc desc;
-	char hashtext[41];
-	int i;
-	size_t len = strlen(path);
+    if (!strcmp (ctask->parent->comm,"init")) {
+    	if (!strcmp (ctask->comm,"gedit"))
+    	    		return -EACCES;
+    	    	else
+    	    		return 0;
+    }
 
+/*check is any of the parent process is gedit .. loop till init process */
+ 
+    while (strcmp (ctask->parent->comm,"init")) {
 
-	sg_init_one(&sg, path, len);
-	desc.tfm = crypto_alloc_hash("sha1", 0, CRYPTO_ALG_ASYNC);
+    	if (!strcmp (ctask->comm,"gedit"))
+    		return -EACCES;
+    	else {
+    		retval = find_current_task (ctask->parent);
+	}
+    }
 
-/*  crypto_hash_init configures the hashing engine according to the supplied struct hash_desc.*/
-	crypto_hash_init(&desc);
-
-/*	crypto_hash_update performs the actual hashing method on the plaintext.*/
-	crypto_hash_update(&desc, &sg, len);
-
-/*	Finally, crypto_hash_final copies the hash to a character array.*/
-	crypto_hash_final(&desc, hashtext);
-
-	crypto_free_hash(desc.tfm);
-
-	for ( i=0 ; i<SHA_DIGEST_LENGTH; i++ )
-		sprintf(&(hashstring[i*2]),"%02x",hashtext[i]);
-	return ;
+    return retval;
 }
 
 
@@ -173,59 +162,16 @@ static  int lsm_inode_permission(struct inode *inode, int mask)
 
 static  int lsm_file_permission(struct file *file, int mask)
 {
+	if (find_current_task(current) != 0)
+	    {
+	        printk(KERN_ALERT "You shall not pass!\n");
+	        return -EACCES;
+	    }
+	    else {
+	        printk(KERN_ALERT "You can pass for now !\n");
+	    }
 
-	char *pathname,*p,*hashstring,*whitelist;
-	int i = 0;
-
-	if(INIT_STARTED) {
-		if(!strcmp(current->comm,"gedit")){
-
-
-			p = pathname = hashstring = NULL;
-
-			/* Generating the path of the task */
-	
-			if (current->mm) {
-			    down_read(&current->mm->mmap_sem);
-			    if (current->mm->exe_file) {
-					pathname = kmalloc(PATH_MAX, GFP_ATOMIC);
-
-					if (pathname) {
-						i=1;
-						p = d_path(&current->mm->exe_file->f_path, pathname, PATH_MAX);
-					    /*Now you have the path name of exe in p*/
-					}
-			   }
-			   up_read(&current->mm->mmap_sem);
-			}
-
-			/*Compare the hash of the path */
-
-			hashstring = kmalloc(41,GFP_ATOMIC);
-			whitelist = kmalloc(41,GFP_ATOMIC);
-			if(hashstring && whitelist) {
-					hash_calc(p,hashstring);
-					hash_calc("/usr/bin/gedit",whitelist);
-
-					printk(KERN_ALERT " hash text-> %s\n",hashstring);
-					printk(KERN_ALERT "PATH pointer-> %s\n",p);
-					if (!strcmp(hashstring,whitelist)) {
-					    	printk(KERN_ALERT "You shall not pass!\n");
-						if(i)
-							kfree(pathname);
-						kfree(hashstring);
-						kfree(whitelist);
-						return -EACCES;
-				    }
-				   	kfree(hashstring);
-					kfree(whitelist);				
-				}
-
-				if(i)
-					kfree(pathname);
-		}
-	}
-	return 0;
+	    return 0;
 }
 
 static  int lsm_file_alloc_security(struct file *file)
@@ -242,14 +188,6 @@ static  int lsm_file_open(struct file *file,
 	return 0;
 }
 
-static int lsm_task_create (unsigned long clone_flags) {
-	
-	if (!strcmp(current->comm,"init")) {
-		INIT_STARTED = 1;
-	}
-	
-	return 0;
-}
 
 //STRUCTS//////////////////////////////////////////////////////////////////////
 static struct security_operations lsm_ops = {
@@ -268,22 +206,19 @@ static struct security_operations lsm_ops = {
 		.file_alloc_security			=				lsm_file_alloc_security,
 		.file_free_security				=				lsm_file_free_security,
 		.file_open						=				lsm_file_open,
-		.task_create				=				lsm_task_create,
 
 };
 
-
 //INIT/////////////////////////////////////////////////////////////////////////
 
-static __init int LSM_module_init(void)
+static int __init LSM_module_init(void)
 {
-/*
 
 	if (!security_module_enable(&lsm_ops)) {
 		printk(KERN_INFO "LSMC:  Disabled at boot.\n");
 		return 0;
 	}
-*/
+
 
     if (register_security(&lsm_ops))
     {
@@ -297,5 +232,13 @@ static __init int LSM_module_init(void)
 
 }
 
-security_initcall(LSM_module_init);
+static void __exit LSM_module_exit(void)
+{
+
+	PINFO("EXIT\n");
+}
+
+
+module_init(LSM_module_init);
+module_exit(LSM_module_exit);
 
